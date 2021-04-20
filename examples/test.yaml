@@ -1,0 +1,31 @@
+settings:
+  workers: 5
+
+
+inputs:
+  - type: beats
+    port: 5048
+
+process:
+  - filter: json
+    source: "message"
+    skip_on_invalid_json: true
+    on_success:
+      - filter: mutate
+        add_field: ["source.env","DENVER"]
+  - filter: prune
+    allowlist: ["data","type","v","sec","source","timestamp"]
+  - filter: test
+    condition: "[v]"
+    on_failure:
+    - drop
+
+  --- Outputs
+  - output: stdout
+    codec: json
+  - output: kafka
+    codec: json
+    topic_id: "aircraft_hub"
+
+
+
