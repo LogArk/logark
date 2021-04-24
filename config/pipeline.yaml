@@ -1,0 +1,43 @@
+settings:
+  workers: 1
+inputs:
+- type: beats
+  port: 5048
+
+process:
+- filter: json
+  params:
+    source: "message"
+    skip_on_invalid_json: true
+  on_success:
+  - filter: mutate
+    add_field: ["source.env","DENVER"]
+- filter: prune
+  params:
+    allowlist: ["data","type","v","sec","source","timestamp"]
+- filter: test
+  params:
+    condition: "[v]"
+  on_failure:
+  - filter: drop
+- filter: mutate
+  params:
+    add_field:
+    - key: "source.env"
+      value: "DENVER"
+    - key: "source.version"
+      value: "1.0.0"
+- filter: mutate
+  params:
+    update_field:
+    - key: "source.env"
+      value: "toto"
+
+outputs:
+- output: stdout
+  params:
+    codec: json
+- output: kafka
+  params:
+    codec: json
+    topic_id: "aircraft_hub"

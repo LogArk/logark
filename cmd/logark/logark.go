@@ -1,167 +1,126 @@
 package main
 
 import (
-	"github.com/Jeffail/gabs"
 	"fmt"
+	"time"
+
+	"github.com/Jeffail/gabs"
 	"github.com/LogArk/logark/internal/filters/mutate"
-	"sigs.k8s.io/yaml"
+	"github.com/LogArk/logark/internal/outputs/stdout"
+	"github.com/LogArk/logark/internal/pipeline"
+	"github.com/LogArk/logark/internal/queue"
 )
 
+func execPipeline(log *gabs.Container, p pipeline.Pipeline) {
+	var executionStack []pipeline.Filter
 
-type PipelineSettings struct {
-	Workers uint `json:"workers"`
-}
-
-type Filter map[string]interface{}
-
-func (f Filter) getName() string {
-	return f["filter"].(string)
-}
-
-func (f Filter) getOnFailure() []Filter {
-	of,_ := f["on_failure"].([]interface{})
-	result := make([]Filter,0)
-	for _,v := range of {
-		newFilter,ok := v.(map[string]interface{})
-		if ok {
-			result = append(result, newFilter)
-		}
-	}
-	return result
-}
-
-func (f Filter) getOnSuccess() []Filter {
-	of,_ := f["on_success"].([]interface{})
-	result := make([]Filter,0)
-	for _,v := range of {
-		newFilter,ok := v.(map[string]interface{})
-		if ok {
-			result = append(result, newFilter)
-		}
-	}
-	return result
-}
-
-func (f Filter) getParams() map[string]interface{} {
-	p,_ := f["params"].(map[string]interface{})
-	return p
-}
-
-type Process []Filter
-
-type Pipeline struct {
-	Settings PipelineSettings `json:"settings"`
-	Process Process `json:"process"`
-}
-
-
-
-func main() {
-
-	fmt.Println("Loading pipeline...")
-
-	y := []byte(`settings:
-  workers: 5
-inputs:
-- type: beats
-  port: 5048
-
-process:
-- filter: json
-  params:
-    source: "message"
-    skip_on_invalid_json: true
-  on_success:
-  - filter: mutate
-    add_field: ["source.env","DENVER"]
-- filter: prune
-  params:
-    allowlist: ["data","type","v","sec","source","timestamp"]
-- filter: test
-  params:
-    condition: "[v]"
-  on_failure:
-  - filter: drop
-- filter: mutate
-  params:
-    add_field:
-    - key: "source.env"
-      value: "DENVER"
-    - key: "source.version"
-      value: "1.0.0"
-- filter: mutate
-  params:
-    update_field:
-    - key: "source.env"
-      value: "toto"
-
-      
-
-
-outputs:
-- output: stdout
-  codec: json
-- output: kafka
-  codec: json
-  topic_id: "aircraft_hub"
-`)  
-
-	j, _ := yaml.YAMLToJSON(y)
-	fmt.Printf("%s\n",j)
-
-	var p Pipeline
-
-	yaml.Unmarshal(y, &p)
-
-	fmt.Println(p)
-
-	fmt.Println("Parsing log...")
-	// Input
-	e := []byte(`{"Name":"Wednesday","Age":6,"Parents":["Gomez","Morticia"]}`)
-
-	jsonParsed, _ := gabs.ParseJSON(e)
-
-	var executionStack []Filter
-
-	// Initialize filter stack 
-	for i:=len(p.Process)-1; i>=0; i-- {
+	// Initialize filter stack
+	for i := len(p.Process) - 1; i >= 0; i-- {
 		executionStack = append(executionStack, p.Process[i])
 	}
-
 
 	for len(executionStack) > 0 {
 		n := len(executionStack) - 1
 
 		// Pop last element
 		V := executionStack[n]
-		executionStack = executionStack[:n] 
+		executionStack = executionStack[:n]
 
-		fmt.Println("----",V.getName(),"----")
+		//fmt.Println("----", V.GetName(), "----")
 
 		status := false
-		switch V.getName() {
+		switch V.GetName() {
 		case "mutate":
-			status = mutate.ExecFilter(jsonParsed, V.getParams())
+			status = mutate.ExecFilter(log, V.GetParams())
 		default:
-			fmt.Println("Cannot handle",V.getName())
+			//fmt.Println("Cannot handle", V.GetName())
 		}
 		if status {
-			fmt.Println("Operation was succcesful, looking at on_success")
-			success := V.getOnSuccess()
-			for i:=len(success)-1; i>=0; i-- {
+			//fmt.Println("Operation was succcesful, looking at on_success")
+			success := V.GetOnSuccess()
+			for i := len(success) - 1; i >= 0; i-- {
 				executionStack = append(executionStack, success[i])
 			}
 		} else {
-			fmt.Println("Operation was not succcesful, looking at on_failure")
-			failure := V.getOnFailure()
-			for i:=len(failure)-1; i>=0; i-- {
+			//fmt.Println("Operation was not succcesful, looking at on_failure")
+			failure := V.GetOnFailure()
+			for i := len(failure) - 1; i >= 0; i-- {
 				executionStack = append(executionStack, failure[i])
 			}
 		}
 
 	}
-	// Output
-	//out, _:= json.Marshal(f)
-	fmt.Println(jsonParsed.String())
+}
 
+func execOutput(log []byte, p pipeline.Pipeline) {
+	for _, o := range p.Outputs {
+		switch o.GetName() {
+		case "stdout":
+			stdout.Send(log)
+		default:
+		}
+	}
+}
+
+func filterWorker(qm *queue.QueueManager, p pipeline.Pipeline, workerId uint) {
+	for {
+		job, _ := qm.GetFilterJob()
+		fmt.Println(workerId, " : got filter job:  ", job.JobId)
+		jsonParsed, _ := gabs.ParseJSON(job.Log)
+		execPipeline(jsonParsed, p)
+		job.Log = jsonParsed.Bytes()
+		qm.CompleteFilterJob(job)
+	}
+}
+
+func outputWorker(qm *queue.QueueManager, p pipeline.Pipeline, workerId uint) {
+	for {
+		job, _ := qm.GetOutputJob()
+		fmt.Println(workerId, " : got output job:  ", job.JobId)
+		execOutput(job.Log, p)
+	}
+}
+
+func main() {
+
+	fmt.Println("Loading pipeline...")
+
+	p, _ := pipeline.Load("./config/pipeline.yaml")
+
+	//fmt.Println(p)
+
+	fmt.Println("Parsing log...")
+	qm := queue.NewQueueManager()
+	qm.PushLog([]byte(`{"Name":"Wednesday","id":1,"Parents":["Gomez","Nico"]}`))
+	qm.PushLog([]byte(`{"Name":"Wednesday","id":2,"Parents":["Gomez","Morticia"]}`))
+	qm.PushLog([]byte(`{"Name":"Wednesday","id":3,"Parents":["Gomez","Morticia"]}`))
+	qm.PushLog([]byte(`{"Name":"Wednesday","id":4,"Parents":["Gomez","Morticia"]}`))
+	qm.PushLog([]byte(`{"Name":"Wednesday","id":5,"Parents":["Gomez","Morticia"]}`))
+
+	fmt.Println("Starting Worker dispatch")
+	go qm.FilterDispatch()
+	go qm.OutputDispatch()
+
+	for i := uint(0); i < p.Settings.Workers; i++ {
+		fmt.Println("Starting worker: ", i)
+		go filterWorker(qm, p, i)
+	}
+
+	go outputWorker(qm, p, 0)
+
+	for {
+		time.Sleep(time.Second * 5)
+		//qm.Dump()
+	}
+
+	// Input
+	return
+	/*
+		jsonParsed, _ := gabs.ParseJSON(e)
+
+		execPipeline(jsonParsed, p)
+
+		// Output
+		fmt.Println(jsonParsed.String())
+	*/
 }
