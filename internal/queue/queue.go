@@ -8,11 +8,11 @@ import (
 )
 
 type QueueManager struct {
-	preFilterQueue      []Job
-	preFilterQueueMutex sync.Mutex
+	filterQueue      []Job
+	filterQueueMutex sync.Mutex
 
-	postFilterQueue      []Job
-	postFilterQueueMutex sync.Mutex
+	outputQueue      []Job
+	outputQueueMutex sync.Mutex
 
 	jobCounter uint64
 
@@ -39,19 +39,19 @@ func (qm *QueueManager) FilterDispatch() {
 		var j Job
 		found := false
 
-		qm.preFilterQueueMutex.Lock()
-		for i, v := range qm.preFilterQueue {
+		qm.filterQueueMutex.Lock()
+		for i, v := range qm.filterQueue {
 			if v.isLocked == false {
-				qm.preFilterQueue[i].isLocked = true
-				j = qm.preFilterQueue[i]
+				qm.filterQueue[i].isLocked = true
+				j = qm.filterQueue[i]
 				found = true
 				break
 			}
 		}
-		qm.preFilterQueueMutex.Unlock()
+		qm.filterQueueMutex.Unlock()
 
 		if found {
-			fmt.Println("Dispatching job", j.JobId)
+			//fmt.Println("Dispatching job", j.JobId)
 			qm.filterDispatch <- j
 		} else {
 			time.Sleep(time.Second)
@@ -66,19 +66,19 @@ func (qm *QueueManager) OutputDispatch() {
 		var j Job
 		found := false
 
-		qm.postFilterQueueMutex.Lock()
-		for i, v := range qm.postFilterQueue {
+		qm.outputQueueMutex.Lock()
+		for i, v := range qm.outputQueue {
 			if !v.isLocked {
-				qm.postFilterQueue[i].isLocked = true
-				j = qm.postFilterQueue[i]
+				qm.outputQueue[i].isLocked = true
+				j = qm.outputQueue[i]
 				found = true
 				break
 			}
 		}
-		qm.postFilterQueueMutex.Unlock()
+		qm.outputQueueMutex.Unlock()
 
 		if found {
-			fmt.Println("Dispatching output", j.JobId)
+			//fmt.Println("Dispatching output", j.JobId)
 			qm.outputDispatch <- j
 		} else {
 			time.Sleep(time.Second)
@@ -89,15 +89,15 @@ func (qm *QueueManager) OutputDispatch() {
 
 func (qm *QueueManager) PushLog(log []byte) error {
 	var j Job
-	qm.preFilterQueueMutex.Lock()
+	qm.filterQueueMutex.Lock()
 
 	j.JobId = qm.jobCounter
 	j.Log = log
 	j.isLocked = false
-	qm.preFilterQueue = append(qm.preFilterQueue, j)
+	qm.filterQueue = append(qm.filterQueue, j)
 	qm.jobCounter++
 
-	qm.preFilterQueueMutex.Unlock()
+	qm.filterQueueMutex.Unlock()
 	return nil
 }
 
@@ -112,15 +112,23 @@ func (qm *QueueManager) GetOutputJob() (Job, error) {
 }
 
 func (qm *QueueManager) GetDepth() int {
-	return len(qm.preFilterQueue)
+	return len(qm.filterQueue)
 }
 
 func (qm *QueueManager) CompleteFilterJob(job Job) error {
 	prefilterIndex := 0
 	found := false
 
+	// Queue job in postfilter
+	qm.outputQueueMutex.Lock()
+	job.isLocked = false
+	qm.outputQueue = append(qm.outputQueue, job)
+	qm.outputQueueMutex.Unlock()
+
+	// Remove job from prefilter
+	qm.filterQueueMutex.Lock()
 	// Find job in prefilter
-	for i, v := range qm.preFilterQueue {
+	for i, v := range qm.filterQueue {
 		if v.JobId == job.JobId {
 			prefilterIndex = i
 			found = true
@@ -131,29 +139,44 @@ func (qm *QueueManager) CompleteFilterJob(job Job) error {
 		fmt.Errorf("Job not found in prefilter queue, this is really unexpected \n")
 		return errors.New("Missing job in prefilter queue")
 	}
+	qm.filterQueue = append(qm.filterQueue[:prefilterIndex], qm.filterQueue[prefilterIndex+1:]...)
+	qm.filterQueueMutex.Unlock()
 
-	// Queue job in postfilter
-	qm.postFilterQueueMutex.Lock()
-	job.isLocked = false
-	qm.postFilterQueue = append(qm.postFilterQueue, job)
-	qm.postFilterQueueMutex.Unlock()
+	return nil
+}
 
-	// Remove job from prefilter
-	qm.preFilterQueueMutex.Lock()
-	qm.preFilterQueue = append(qm.preFilterQueue[:prefilterIndex], qm.preFilterQueue[prefilterIndex+1:]...)
-	qm.preFilterQueueMutex.Unlock()
+func (qm *QueueManager) CompleteOutputJob(job Job) error {
+	outputIndex := 0
+	found := false
+
+	// Remove job from output
+	qm.outputQueueMutex.Lock()
+	// Find job in outpout
+	for i, v := range qm.outputQueue {
+		if v.JobId == job.JobId {
+			outputIndex = i
+			found = true
+			break
+		}
+	}
+	if !found {
+		fmt.Errorf("Job not found in output queue, this is really unexpected \n")
+		return errors.New("Missing job in output queue")
+	}
+	qm.outputQueue = append(qm.outputQueue[:outputIndex], qm.outputQueue[outputIndex+1:]...)
+	qm.outputQueueMutex.Unlock()
 
 	return nil
 }
 
 func (qm QueueManager) Dump() {
 	fmt.Println("preFilter")
-	for _, v := range qm.preFilterQueue {
+	for _, v := range qm.filterQueue {
 		fmt.Println(v)
 	}
 
 	fmt.Println("postFilter")
-	for _, v := range qm.postFilterQueue {
+	for _, v := range qm.outputQueue {
 		fmt.Println(v)
 	}
 }

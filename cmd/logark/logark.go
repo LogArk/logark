@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/Jeffail/gabs"
 	"github.com/LogArk/logark/internal/filters/mutate"
@@ -65,7 +64,7 @@ func execOutput(log []byte, p pipeline.Pipeline) {
 func filterWorker(qm *queue.QueueManager, p pipeline.Pipeline, workerId uint) {
 	for {
 		job, _ := qm.GetFilterJob()
-		fmt.Println(workerId, " : got filter job:  ", job.JobId)
+		//fmt.Println(workerId, " : got filter job:  ", job.JobId)
 		jsonParsed, _ := gabs.ParseJSON(job.Log)
 		execPipeline(jsonParsed, p)
 		job.Log = jsonParsed.Bytes()
@@ -76,41 +75,37 @@ func filterWorker(qm *queue.QueueManager, p pipeline.Pipeline, workerId uint) {
 func outputWorker(qm *queue.QueueManager, p pipeline.Pipeline, workerId uint) {
 	for {
 		job, _ := qm.GetOutputJob()
-		fmt.Println(workerId, " : got output job:  ", job.JobId)
+		//fmt.Println(workerId, " : got output job:  ", job.JobId)
 		execOutput(job.Log, p)
+		qm.CompleteOutputJob(job)
 	}
 }
 
 func main() {
 
 	fmt.Println("Loading pipeline...")
-
 	p, _ := pipeline.Load("./config/pipeline.yaml")
 
-	//fmt.Println(p)
-
-	fmt.Println("Parsing log...")
+	fmt.Println("Creating queue manager")
 	qm := queue.NewQueueManager()
-	qm.PushLog([]byte(`{"Name":"Wednesday","id":1,"Parents":["Gomez","Nico"]}`))
-	qm.PushLog([]byte(`{"Name":"Wednesday","id":2,"Parents":["Gomez","Morticia"]}`))
-	qm.PushLog([]byte(`{"Name":"Wednesday","id":3,"Parents":["Gomez","Morticia"]}`))
-	qm.PushLog([]byte(`{"Name":"Wednesday","id":4,"Parents":["Gomez","Morticia"]}`))
-	qm.PushLog([]byte(`{"Name":"Wednesday","id":5,"Parents":["Gomez","Morticia"]}`))
 
-	fmt.Println("Starting Worker dispatch")
-	go qm.FilterDispatch()
-	go qm.OutputDispatch()
+	go outputWorker(qm, p, 0)
 
 	for i := uint(0); i < p.Settings.Workers; i++ {
 		fmt.Println("Starting worker: ", i)
 		go filterWorker(qm, p, i)
 	}
 
-	go outputWorker(qm, p, 0)
+	fmt.Println("Starting Output dispatch")
+	go qm.OutputDispatch()
+
+	fmt.Println("Starting Filter dispatch")
+	go qm.FilterDispatch()
 
 	for {
-		time.Sleep(time.Second * 5)
-		//qm.Dump()
+		var input string
+		fmt.Scanln(&input)
+		qm.PushLog([]byte(input))
 	}
 
 	// Input
