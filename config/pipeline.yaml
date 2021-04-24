@@ -14,7 +14,7 @@ process:
     add_field: ["source.env","DENVER"]
 - filter: prune
   params:
-    allowlist: ["data","type","v","sec","source","timestamp"]
+    allow_list: ["data","type","v","sec","source","timestamp"]
 - filter: test
   params:
     condition: "[v]"
@@ -27,11 +27,16 @@ process:
       value: "DENVER"
     - key: "source.version"
       value: "1.0.0"
+    - key: "v"
+      value: "1.0"
 - filter: mutate
   params:
     update_field:
     - key: "source.env"
       value: "toto"
+- filter: prune
+  params:
+    deny_list: ["source"]
 
 outputs:
 - output: stdout

@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
+	"os"
 
 	"github.com/Jeffail/gabs"
 	"github.com/LogArk/logark/internal/filters/mutate"
+	"github.com/LogArk/logark/internal/filters/prune"
 	"github.com/LogArk/logark/internal/outputs/stdout"
 	"github.com/LogArk/logark/internal/pipeline"
 	"github.com/LogArk/logark/internal/queue"
@@ -31,6 +34,8 @@ func execPipeline(log *gabs.Container, p pipeline.Pipeline) {
 		switch V.GetName() {
 		case "mutate":
 			status = mutate.ExecFilter(log, V.GetParams())
+		case "prune":
+			status = prune.ExecFilter(log, V.GetParams())
 		default:
 			//fmt.Println("Cannot handle", V.GetName())
 		}
@@ -65,9 +70,15 @@ func filterWorker(qm *queue.QueueManager, p pipeline.Pipeline, workerId uint) {
 	for {
 		job, _ := qm.GetFilterJob()
 		//fmt.Println(workerId, " : got filter job:  ", job.JobId)
-		jsonParsed, _ := gabs.ParseJSON(job.Log)
-		execPipeline(jsonParsed, p)
-		job.Log = jsonParsed.Bytes()
+		jsonParsed, err := gabs.ParseJSON(job.Log)
+		if err != nil {
+			fmt.Println("====================", string(job.Log))
+			fmt.Println(err)
+		} else {
+			execPipeline(jsonParsed, p)
+			job.Log = jsonParsed.Bytes()
+		}
+
 		qm.CompleteFilterJob(job)
 	}
 }
@@ -83,39 +94,32 @@ func outputWorker(qm *queue.QueueManager, p pipeline.Pipeline, workerId uint) {
 
 func main() {
 
-	fmt.Println("Loading pipeline...")
+	//fmt.Println("Loading pipeline...")
 	p, _ := pipeline.Load("./config/pipeline.yaml")
 
-	fmt.Println("Creating queue manager")
+	//fmt.Println("Creating queue manager")
 	qm := queue.NewQueueManager()
 
 	go outputWorker(qm, p, 0)
 
 	for i := uint(0); i < p.Settings.Workers; i++ {
-		fmt.Println("Starting worker: ", i)
+		//fmt.Println("Starting worker: ", i)
 		go filterWorker(qm, p, i)
 	}
 
-	fmt.Println("Starting Output dispatch")
+	//fmt.Println("Starting Output dispatch")
 	go qm.OutputDispatch()
 
-	fmt.Println("Starting Filter dispatch")
+	//fmt.Println("Starting Filter dispatch")
 	go qm.FilterDispatch()
 
+	scanner := bufio.NewScanner(os.Stdin)
 	for {
-		var input string
-		fmt.Scanln(&input)
-		qm.PushLog([]byte(input))
+		for scanner.Scan() {
+			text := scanner.Text()
+			qm.PushLog([]byte(text))
+		}
 	}
-
-	// Input
 	return
-	/*
-		jsonParsed, _ := gabs.ParseJSON(e)
 
-		execPipeline(jsonParsed, p)
-
-		// Output
-		fmt.Println(jsonParsed.String())
-	*/
 }
