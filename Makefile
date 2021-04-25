@@ -24,7 +24,7 @@ $(BIN_DIR):
 	mkdir -p $@
 
 binary: $(BIN_DIR)
-	GO111MODULE=on $(GOBUILD) -o $(BIN_DIR)/$(BINARY_NAME) $(CMD_DIR)/$(CMD)
+	GO111MODULE=on $(GOBUILD) $(CMD_DIR)/$(CMD)
 
 docker: binary
 	docker build -t $(DOCKER_IMAGE) .
