@@ -1,12 +1,17 @@
-# logark
-LogArk, save your logs from the flood
+# LogArk, save your logs from the flood
 
-## Intput plugins
+LogArk is a lightweight & modular log processor inspired by Logtash
+
+LogArk is currently being developed and is far from being production ready. Use at your own risk
+
+## Plugins
+### Input plugins
 - stdin
 
-## Filter plugins
+### Filter plugins
 - mutate
 - prune
+- test
 
-## Output plugins
+### Output plugins
 - stdout

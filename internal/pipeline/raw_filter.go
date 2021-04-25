@@ -1,14 +1,14 @@
 package pipeline
 
-type Filter map[string]interface{}
+type RawFilter map[string]interface{}
 
-func (f Filter) GetName() string {
+func (f RawFilter) GetName() string {
 	return f["filter"].(string)
 }
 
-func (f Filter) GetOnFailure() []Filter {
+func (f RawFilter) GetOnFailure() []RawFilter {
 	of, _ := f["on_failure"].([]interface{})
-	result := make([]Filter, 0)
+	result := make([]RawFilter, 0)
 	for _, v := range of {
 		newFilter, ok := v.(map[string]interface{})
 		if ok {
@@ -18,9 +18,9 @@ func (f Filter) GetOnFailure() []Filter {
 	return result
 }
 
-func (f Filter) GetOnSuccess() []Filter {
+func (f RawFilter) GetOnSuccess() []RawFilter {
 	of, _ := f["on_success"].([]interface{})
-	result := make([]Filter, 0)
+	result := make([]RawFilter, 0)
 	for _, v := range of {
 		newFilter, ok := v.(map[string]interface{})
 		if ok {
@@ -30,7 +30,7 @@ func (f Filter) GetOnSuccess() []Filter {
 	return result
 }
 
-func (f Filter) GetParams() map[string]interface{} {
+func (f RawFilter) GetParams() map[string]interface{} {
 	p, _ := f["params"].(map[string]interface{})
 	return p
 }

@@ -6,20 +6,17 @@ import (
 	"os"
 
 	"github.com/Jeffail/gabs"
-	"github.com/LogArk/logark/internal/filters/mutate"
-	"github.com/LogArk/logark/internal/filters/prune"
-	"github.com/LogArk/logark/internal/filters/test"
 	"github.com/LogArk/logark/internal/outputs/stdout"
 	"github.com/LogArk/logark/internal/pipeline"
 	"github.com/LogArk/logark/internal/queue"
 )
 
-func execPipeline(log *gabs.Container, p pipeline.Pipeline) {
-	var executionStack []pipeline.Filter
+func execPipeline(log *gabs.Container, p *pipeline.FilterPipeline) {
+	var executionStack []pipeline.FilterAction
 
 	// Initialize filter stack
-	for i := len(p.Process) - 1; i >= 0; i-- {
-		executionStack = append(executionStack, p.Process[i])
+	for i := len(p.Filters) - 1; i >= 0; i-- {
+		executionStack = append(executionStack, p.Filters[i])
 	}
 
 	for len(executionStack) > 0 {
@@ -29,38 +26,26 @@ func execPipeline(log *gabs.Container, p pipeline.Pipeline) {
 		V := executionStack[n]
 		executionStack = executionStack[:n]
 
-		//fmt.Println("----", V.GetName(), "----")
-
 		status := false
-		switch V.GetName() {
-		case "mutate":
-			status = mutate.ExecFilter(log, V.GetParams())
-		case "prune":
-			status = prune.ExecFilter(log, V.GetParams())
-		case "test":
-			status = test.ExecFilter(log, V.GetParams())
-		default:
-			//fmt.Println("Cannot handle", V.GetName())
-		}
+		status, _ = V.Plugin.Exec(log)
+
 		if status {
-			//fmt.Println("Operation was succcesful, looking at on_success")
-			success := V.GetOnSuccess()
-			for i := len(success) - 1; i >= 0; i-- {
-				executionStack = append(executionStack, success[i])
+			success := V.OnSuccess
+			for i := len(success.Filters) - 1; i >= 0; i-- {
+				executionStack = append(executionStack, success.Filters[i])
 			}
 		} else {
 			//fmt.Println("Operation was not succcesful, looking at on_failure")
-			failure := V.GetOnFailure()
-			for i := len(failure) - 1; i >= 0; i-- {
-				executionStack = append(executionStack, failure[i])
+			failure := V.OnFailure
+			for i := len(failure.Filters) - 1; i >= 0; i-- {
+				executionStack = append(executionStack, failure.Filters[i])
 			}
 		}
-
 	}
 }
 
-func execOutput(log []byte, p pipeline.Pipeline) {
-	for _, o := range p.Outputs {
+func execOutput(log []byte, o []pipeline.Output) {
+	for _, o := range o {
 		switch o.GetName() {
 		case "stdout":
 			stdout.Send(log)
@@ -69,10 +54,9 @@ func execOutput(log []byte, p pipeline.Pipeline) {
 	}
 }
 
-func filterWorker(qm *queue.QueueManager, p pipeline.Pipeline, workerId uint) {
+func filterWorker(qm *queue.QueueManager, p *pipeline.FilterPipeline, workerId uint) {
 	for {
 		job, _ := qm.GetFilterJob()
-		//fmt.Println(workerId, " : got filter job:  ", job.JobId)
 		jsonParsed, err := gabs.ParseJSON(job.Log)
 		if err != nil {
 			fmt.Println("====================", string(job.Log))
@@ -86,36 +70,28 @@ func filterWorker(qm *queue.QueueManager, p pipeline.Pipeline, workerId uint) {
 	}
 }
 
-func outputWorker(qm *queue.QueueManager, p pipeline.Pipeline, workerId uint) {
+func outputWorker(qm *queue.QueueManager, o []pipeline.Output, workerId uint) {
 	for {
 		job, _ := qm.GetOutputJob()
-		//fmt.Println(workerId, " : got output job:  ", job.JobId)
-		execOutput(job.Log, p)
+		execOutput(job.Log, o)
 		qm.CompleteOutputJob(job)
 	}
 }
 
 func main() {
 
-	//fmt.Println("Loading pipeline...")
 	p, _ := pipeline.Load("./config/pipeline.yaml")
 
-	//fmt.Println("Creating queue manager")
 	qm := queue.NewQueueManager()
 
-	go outputWorker(qm, p, 0)
-
+	go outputWorker(qm, p.Outputs, 0)
 	for i := uint(0); i < p.Settings.Workers; i++ {
-		//fmt.Println("Starting worker: ", i)
-		go filterWorker(qm, p, i)
+		go filterWorker(qm, p.FilterPipeline, i)
 	}
-
-	//fmt.Println("Starting Output dispatch")
 	go qm.OutputDispatch()
-
-	//fmt.Println("Starting Filter dispatch")
 	go qm.FilterDispatch()
 
+	/* Fake stdin input */
 	scanner := bufio.NewScanner(os.Stdin)
 	for {
 		for scanner.Scan() {
@@ -123,6 +99,4 @@ func main() {
 			qm.PushLog([]byte(text))
 		}
 	}
-	return
-
 }

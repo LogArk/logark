@@ -4,14 +4,7 @@ inputs:
 - type: beats
   port: 5048
 
-process:
-- filter: json
-  params:
-    source: "message"
-    skip_on_invalid_json: true
-  on_success:
-  - filter: mutate
-    add_field: ["source.env","DENVER"]
+filters:
 - filter: prune
   params:
     allow_list: ["data","type","v","sec","source","timestamp"]
@@ -30,7 +23,7 @@ process:
       add_field:
       - key: "message"
         value: "I am in DEV"
-- filter: mutatev
+- filter: mutate
   params:
     add_field:
     - key: "source.env"
@@ -39,14 +32,6 @@ process:
       value: "1.0.0"
     - key: "v"
       value: "1.0"
-- filter: mutate
-  params:
-    update_field:
-    - key: "source.env"
-      value: "toto"
-- filter: prune
-  params:
-    deny_list: ["source"]
 
 outputs:
 - output: stdout
