@@ -13,7 +13,7 @@ func allowList(event *gabs.Container, value interface{}) {
 		keyMap[strKey] = true
 	}
 	keys, _ := event.S().ChildrenMap()
-	for key, _ := range keys {
+	for key := range keys {
 		if !keyMap[key] {
 			event.Delete(key)
 		}
@@ -28,7 +28,7 @@ func denyList(event *gabs.Container, value interface{}) {
 		keyMap[strKey] = true
 	}
 	keys, _ := event.S().ChildrenMap()
-	for key, _ := range keys {
+	for key := range keys {
 		if keyMap[key] {
 			event.Delete(key)
 		}
@@ -45,7 +45,7 @@ func ExecFilter(event *gabs.Container, params map[string]interface{}) bool {
 		case "deny_list":
 			denyList(event, value)
 		default:
-			fmt.Errorf("Unknown param: %s\n", key)
+			fmt.Printf("Unknown param: %s\n", key)
 		}
 	}
 	//Println("--- exiting mutate.")

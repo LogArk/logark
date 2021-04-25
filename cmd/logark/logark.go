@@ -123,6 +123,4 @@ func main() {
 			qm.PushLog([]byte(text))
 		}
 	}
-	return
-
 }
