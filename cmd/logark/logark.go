@@ -28,6 +28,7 @@ func execPipeline(log *gabs.Container, p *pipeline.FilterPipeline) {
 
 		status := false
 		status, _ = V.Plugin.Exec(log)
+
 		if status {
 			success := V.OnSuccess
 			for i := len(success.Filters) - 1; i >= 0; i-- {
