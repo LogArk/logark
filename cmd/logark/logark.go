@@ -4,19 +4,24 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
+	"plugin"
 
 	"github.com/Jeffail/gabs"
-	"github.com/LogArk/logark/internal/filters/mutate"
-	"github.com/LogArk/logark/internal/filters/prune"
-	"github.com/LogArk/logark/internal/filters/test"
 	"github.com/LogArk/logark/internal/outputs/stdout"
 	"github.com/LogArk/logark/internal/pipeline"
 	"github.com/LogArk/logark/internal/queue"
-	"github.com/LogArk/logark/pkg/plugin"
+	plg "github.com/LogArk/logark/pkg/plugin"
 )
 
 func execPipeline(log *gabs.Container, p pipeline.Pipeline) {
 	var executionStack []pipeline.Filter
+
+	dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 
 	// Initialize filter stack
 	for i := len(p.Process) - 1; i >= 0; i-- {
@@ -33,25 +38,21 @@ func execPipeline(log *gabs.Container, p pipeline.Pipeline) {
 		//fmt.Println("----", V.GetName(), "----")
 
 		status := false
-		switch V.GetName() {
-		case "mutate":
-			var mp plugin.FilterPlugin
-			mp = mutate.New()
-			mp.Init(V.GetParams())
-			status, _ = mp.Exec(log)
-		case "prune":
-			var mp plugin.FilterPlugin
-			mp = prune.New()
-			mp.Init(V.GetParams())
-			status, _ = mp.Exec(log)
-		case "test":
-			var mp plugin.FilterPlugin
-			mp = test.New()
-			mp.Init(V.GetParams())
-			status, _ = mp.Exec(log)
-		default:
-			//fmt.Println("Cannot handle", V.GetName())
+		pluginName := V.GetName()
+		plug, err := plugin.Open(dir + "/plugins/" + pluginName + ".so")
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
 		}
+		newPlugin, err := plug.Lookup("New")
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+
+		mp := newPlugin.(func() plg.FilterPlugin)()
+		mp.Init(V.GetParams())
+		status, _ = mp.Exec(log)
 		if status {
 			//fmt.Println("Operation was succcesful, looking at on_success")
 			success := V.GetOnSuccess()

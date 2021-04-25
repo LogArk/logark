@@ -1,4 +1,4 @@
-.PHONY: all clean
+.PHONY: all clean plugins
 
 TAG_NAME := $(shell git tag -l --contains HEAD)
 SHA := $(shell git rev-parse HEAD)
@@ -16,15 +16,21 @@ GOGET=$(GOCMD) get
 CMD:=logark
 
 BIN_DIR:=dist
+PLUGIN_DIR:=$(BIN_DIR)/plugins
 CMD_DIR:=./cmd
     
-all: binary
+all: plugins binary
+
+plugins:
+	GO111MODULE=on $(GOBUILD) -buildmode=plugin -o $(PLUGIN_DIR)/mutate.so ./plugins/filters/mutate/...
+	GO111MODULE=on $(GOBUILD) -buildmode=plugin -o $(PLUGIN_DIR)/test.so ./plugins/filters/test/...
+	GO111MODULE=on $(GOBUILD) -buildmode=plugin -o $(PLUGIN_DIR)/prune.so ./plugins/filters/prune/...
 
 $(BIN_DIR):
 	mkdir -p $@
 
 binary: $(BIN_DIR)
-	GO111MODULE=on $(GOBUILD) $(CMD_DIR)/$(CMD)
+	GO111MODULE=on $(GOBUILD) -o ./$(BIN_DIR)/$(CMD) $(CMD_DIR)/$(CMD) 
 
 docker: binary
 	docker build -t $(DOCKER_IMAGE) .

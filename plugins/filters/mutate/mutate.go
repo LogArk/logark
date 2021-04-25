@@ -1,4 +1,4 @@
-package mutate
+package main
 
 import (
 	"github.com/Jeffail/gabs"
@@ -59,6 +59,5 @@ func updateField(event *gabs.Container, path string, fieldValue interface{}) {
 
 func New() plugin.FilterPlugin {
 	var p MutatePlugin
-
 	return &p
 }

@@ -5,13 +5,6 @@ inputs:
   port: 5048
 
 process:
-- filter: json
-  params:
-    source: "message"
-    skip_on_invalid_json: true
-  on_success:
-  - filter: mutate
-    add_field: ["source.env","DENVER"]
 - filter: prune
   params:
     allow_list: ["data","type","v","sec","source","timestamp"]
