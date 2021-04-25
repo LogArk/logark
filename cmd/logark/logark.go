@@ -8,6 +8,7 @@ import (
 	"github.com/Jeffail/gabs"
 	"github.com/LogArk/logark/internal/filters/mutate"
 	"github.com/LogArk/logark/internal/filters/prune"
+	"github.com/LogArk/logark/internal/filters/test"
 	"github.com/LogArk/logark/internal/outputs/stdout"
 	"github.com/LogArk/logark/internal/pipeline"
 	"github.com/LogArk/logark/internal/queue"
@@ -36,6 +37,8 @@ func execPipeline(log *gabs.Container, p pipeline.Pipeline) {
 			status = mutate.ExecFilter(log, V.GetParams())
 		case "prune":
 			status = prune.ExecFilter(log, V.GetParams())
+		case "test":
+			status = test.ExecFilter(log, V.GetParams())
 		default:
 			//fmt.Println("Cannot handle", V.GetName())
 		}

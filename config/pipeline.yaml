@@ -17,10 +17,20 @@ process:
     allow_list: ["data","type","v","sec","source","timestamp"]
 - filter: test
   params:
-    condition: "[v]"
+    condition: "[source.env] == 'qa'"
+  on_success:
+  - filter: mutate
+    params:
+      add_field:
+      - key: "message"
+        value: "I am in QA"
   on_failure:
-  - filter: drop
-- filter: mutate
+  - filter: mutate
+    params:
+      add_field:
+      - key: "message"
+        value: "I am in DEV"
+- filter: mutatev
   params:
     add_field:
     - key: "source.env"
