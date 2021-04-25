@@ -1,12 +1,12 @@
 package pipeline
 
-type Output map[string]interface{}
+type RawOutput map[string]interface{}
 
-func (f Output) GetName() string {
+func (f RawOutput) GetName() string {
 	return f["output"].(string)
 }
 
-func (f Output) GetParams() map[string]interface{} {
+func (f RawOutput) GetParams() map[string]interface{} {
 	p, _ := f["params"].(map[string]interface{})
 	return p
 }

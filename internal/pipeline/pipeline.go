@@ -15,7 +15,7 @@ type PipelineSettings struct {
 type RawPipeline struct {
 	Settings PipelineSettings `json:"settings"`
 	Filters  []RawFilter      `json:"filters"`
-	Outputs  []Output         `json:"Outputs"`
+	Outputs  []RawOutput      `json:"outputs"`
 }
 
 type Pipeline struct {
@@ -23,7 +23,7 @@ type Pipeline struct {
 
 	Settings       *PipelineSettings
 	FilterPipeline *FilterPipeline
-	Outputs        []Output
+	OutputPipeline *OutputPipeline
 }
 
 func Load(path string) (Pipeline, error) {
@@ -45,8 +45,8 @@ func Load(path string) (Pipeline, error) {
 
 	p.raw = rp
 	p.Settings = &p.raw.Settings
-	p.Outputs = p.raw.Outputs
-	p.FilterPipeline = buildPipeline(p.raw.Filters)
+	p.FilterPipeline = buildFilterdPipeline(p.raw.Filters)
+	p.OutputPipeline = buildOutputdPipeline(p.raw.Outputs)
 
 	return p, nil
 }

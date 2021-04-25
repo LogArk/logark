@@ -20,7 +20,7 @@ type FilterPipeline struct {
 	Filters []FilterAction
 }
 
-func buildPipeline(f []RawFilter) *FilterPipeline {
+func buildFilterdPipeline(f []RawFilter) *FilterPipeline {
 	var err error
 	var rootPipeline FilterPipeline
 	var plugins map[string]*plugin.Plugin = make(map[string]*plugin.Plugin)
@@ -39,7 +39,7 @@ func buildPipeline(f []RawFilter) *FilterPipeline {
 		// Check if plugin is already loaded. If not, load it
 		plug := plugins[fa.Name]
 		if plug == nil {
-			plug, err = plugin.Open(dir + "/plugins/" + fa.Name + ".so")
+			plug, err = plugin.Open(dir + "/plugins/filters/" + fa.Name + ".so")
 			if err != nil {
 				fmt.Println(err)
 				os.Exit(1)
@@ -54,8 +54,8 @@ func buildPipeline(f []RawFilter) *FilterPipeline {
 		}
 		fa.Plugin = newPlugin.(func() plg.FilterPlugin)()
 		fa.Plugin.Init(v.GetParams())
-		fa.OnSuccess = buildPipeline(v.GetOnSuccess())
-		fa.OnFailure = buildPipeline(v.GetOnFailure())
+		fa.OnSuccess = buildFilterdPipeline(v.GetOnSuccess())
+		fa.OnFailure = buildFilterdPipeline(v.GetOnFailure())
 
 		rootPipeline.Filters = append(rootPipeline.Filters, fa)
 	}

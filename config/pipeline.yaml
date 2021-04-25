@@ -37,7 +37,3 @@ outputs:
 - output: stdout
   params:
     codec: json
-- output: kafka
-  params:
-    codec: json
-    topic_id: "aircraft_hub"

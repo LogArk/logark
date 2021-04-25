@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"github.com/Jeffail/gabs"
-	"github.com/LogArk/logark/internal/outputs/stdout"
 	"github.com/LogArk/logark/internal/pipeline"
 	"github.com/LogArk/logark/internal/queue"
 )
@@ -44,13 +43,9 @@ func execPipeline(log *gabs.Container, p *pipeline.FilterPipeline) {
 	}
 }
 
-func execOutput(log []byte, o []pipeline.Output) {
-	for _, o := range o {
-		switch o.GetName() {
-		case "stdout":
-			stdout.Send(log)
-		default:
-		}
+func execOutput(log []byte, o *pipeline.OutputPipeline) {
+	for _, o := range o.Outputs {
+		o.Plugin.Send(log)
 	}
 }
 
@@ -70,7 +65,7 @@ func filterWorker(qm *queue.QueueManager, p *pipeline.FilterPipeline, workerId u
 	}
 }
 
-func outputWorker(qm *queue.QueueManager, o []pipeline.Output, workerId uint) {
+func outputWorker(qm *queue.QueueManager, o *pipeline.OutputPipeline, workerId uint) {
 	for {
 		job, _ := qm.GetOutputJob()
 		execOutput(job.Log, o)
@@ -84,7 +79,7 @@ func main() {
 
 	qm := queue.NewQueueManager()
 
-	go outputWorker(qm, p.Outputs, 0)
+	go outputWorker(qm, p.OutputPipeline, 0)
 	for i := uint(0); i < p.Settings.Workers; i++ {
 		go filterWorker(qm, p.FilterPipeline, i)
 	}
