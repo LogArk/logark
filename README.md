@@ -1,5 +1,5 @@
 # logark
-LogArk, save you logs from the flood
+LogArk, save your logs from the flood
 
 ## Intput plugins
 - stdin
