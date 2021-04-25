@@ -2,46 +2,63 @@ package mutate
 
 import (
 	"github.com/Jeffail/gabs"
+	"github.com/LogArk/logark/pkg/plugin"
 )
 
-func ExecFilter(event *gabs.Container, params map[string]interface{}) bool {
-	status := true
-	//Println("--- entering mutate.")
-	//Println(params)
-	for key, value := range params {
-		switch key {
-		case "add_field":
-			for _, v := range value.([]interface{}) {
-				hash := v.(map[string]interface{})
-				AddField(event, hash["key"].(string), hash["value"])
-			}
-
-		case "update_field":
-			for _, v := range value.([]interface{}) {
-				hash := v.(map[string]interface{})
-				UpdateField(event, hash["key"].(string), hash["value"])
-			}
-		default:
-			//Println("Unknown param: ", key)
-		}
-	}
-
-	//Println("--- exiting mutate.")
-	return status
+type Command struct {
+	name  string
+	key   string
+	value interface{}
 }
 
-func getFieldFromName(event *interface{}, fieldName string) *interface{} {
+type MutatePlugin struct {
+	commands []Command
+}
+
+func (p *MutatePlugin) Init(params map[string]interface{}) error {
+	for key, value := range params {
+		for _, v := range value.([]interface{}) {
+			hash := v.(map[string]interface{})
+			newCommand := Command{
+				name:  key,
+				key:   hash["key"].(string),
+				value: hash["value"],
+			}
+			p.commands = append(p.commands, newCommand)
+		}
+	}
 	return nil
 }
 
-func AddField(event *gabs.Container, path string, fieldValue interface{}) {
+func (p MutatePlugin) Exec(event *gabs.Container) (bool, error) {
+	status := true
+
+	for _, c := range p.commands {
+		switch c.name {
+		case "add_field":
+			addField(event, c.key, c.value)
+		case "update_field":
+			updateField(event, c.key, c.value)
+		default:
+		}
+	}
+	return status, nil
+}
+
+func addField(event *gabs.Container, path string, fieldValue interface{}) {
 	event.SetP(fieldValue, path)
 }
 
-func UpdateField(event *gabs.Container, path string, fieldValue interface{}) {
+func updateField(event *gabs.Container, path string, fieldValue interface{}) {
 	data := event.Path(path).Data()
 	if data != nil {
 		event.SetP(fieldValue, path)
 	}
 
+}
+
+func New() plugin.FilterPlugin {
+	var p MutatePlugin
+
+	return &p
 }

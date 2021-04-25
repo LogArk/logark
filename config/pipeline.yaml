@@ -30,7 +30,7 @@ process:
       add_field:
       - key: "message"
         value: "I am in DEV"
-- filter: mutatev
+- filter: mutate
   params:
     add_field:
     - key: "source.env"

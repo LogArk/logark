@@ -12,6 +12,7 @@ import (
 	"github.com/LogArk/logark/internal/outputs/stdout"
 	"github.com/LogArk/logark/internal/pipeline"
 	"github.com/LogArk/logark/internal/queue"
+	"github.com/LogArk/logark/pkg/plugin"
 )
 
 func execPipeline(log *gabs.Container, p pipeline.Pipeline) {
@@ -34,11 +35,20 @@ func execPipeline(log *gabs.Container, p pipeline.Pipeline) {
 		status := false
 		switch V.GetName() {
 		case "mutate":
-			status = mutate.ExecFilter(log, V.GetParams())
+			var mp plugin.FilterPlugin
+			mp = mutate.New()
+			mp.Init(V.GetParams())
+			status, _ = mp.Exec(log)
 		case "prune":
-			status = prune.ExecFilter(log, V.GetParams())
+			var mp plugin.FilterPlugin
+			mp = prune.New()
+			mp.Init(V.GetParams())
+			status, _ = mp.Exec(log)
 		case "test":
-			status = test.ExecFilter(log, V.GetParams())
+			var mp plugin.FilterPlugin
+			mp = test.New()
+			mp.Init(V.GetParams())
+			status, _ = mp.Exec(log)
 		default:
 			//fmt.Println("Cannot handle", V.GetName())
 		}

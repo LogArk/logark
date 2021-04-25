@@ -5,7 +5,13 @@ import (
 
 	"github.com/Jeffail/gabs"
 	"github.com/Knetic/govaluate"
+	"github.com/LogArk/logark/pkg/plugin"
 )
+
+type TestFilter struct {
+	rawCondition string
+	expression   *govaluate.EvaluableExpression
+}
 
 type EventParameter struct {
 	Event *gabs.Container
@@ -26,24 +32,31 @@ var functions = map[string]govaluate.ExpressionFunction{
 	},
 }
 
-func ExecFilter(event *gabs.Container, params map[string]interface{}) bool {
-	status := true
+func (f *TestFilter) Init(params map[string]interface{}) error {
+	var err error
 
-	condition := params["condition"].(string)
-	myLog := EventParameter{Event: event}
+	f.rawCondition = params["condition"].(string)
 
 	/* Build expression */
-	expression, err := govaluate.NewEvaluableExpressionWithFunctions(condition, functions)
+	f.expression, err = govaluate.NewEvaluableExpressionWithFunctions(f.rawCondition, functions)
 	if err != nil {
 		fmt.Println(err)
-		return false
+		return err
 	}
 
+	return nil
+}
+
+func (f TestFilter) Exec(event *gabs.Container) (bool, error) {
+	status := true
+
+	myLog := EventParameter{Event: event}
+
 	/* Evaluate result */
-	result, err := expression.Eval(&myLog)
+	result, err := f.expression.Eval(&myLog)
 	if err != nil {
 		fmt.Println(err)
-		return false
+		return false, err
 	}
 
 	/* If result is boolean, take result. Otherwise, evaluate if nil or not */
@@ -54,5 +67,11 @@ func ExecFilter(event *gabs.Container, params map[string]interface{}) bool {
 		status = v != nil
 	}
 
-	return status
+	return status, nil
+}
+
+func New() plugin.FilterPlugin {
+	var p TestFilter
+
+	return &p
 }
