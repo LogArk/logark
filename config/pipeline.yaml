@@ -4,7 +4,7 @@ inputs:
 - type: beats
   port: 5048
 
-process:
+filters:
 - filter: prune
   params:
     allow_list: ["data","type","v","sec","source","timestamp"]

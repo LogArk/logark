@@ -12,13 +12,22 @@ type PipelineSettings struct {
 	Workers uint `json:"workers"`
 }
 
-type Pipeline struct {
+type RawPipeline struct {
 	Settings PipelineSettings `json:"settings"`
-	Process  []Filter         `json:"process"`
+	Filters  []RawFilter      `json:"filters"`
 	Outputs  []Output         `json:"Outputs"`
 }
 
+type Pipeline struct {
+	raw RawPipeline
+
+	Settings       *PipelineSettings
+	FilterPipeline *FilterPipeline
+	Outputs        []Output
+}
+
 func Load(path string) (Pipeline, error) {
+	var rp RawPipeline
 	var p Pipeline
 
 	yamlFile, err := os.Open(path)
@@ -32,7 +41,12 @@ func Load(path string) (Pipeline, error) {
 	byteValue, _ := ioutil.ReadAll(yamlFile)
 	j, _ := yaml.YAMLToJSON(byteValue)
 
-	yaml.Unmarshal(j, &p)
+	yaml.Unmarshal(j, &rp)
+
+	p.raw = rp
+	p.Settings = &p.raw.Settings
+	p.Outputs = p.raw.Outputs
+	p.FilterPipeline = buildPipeline(p.raw.Filters)
 
 	return p, nil
 }

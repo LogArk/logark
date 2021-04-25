@@ -4,71 +4,15 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"path/filepath"
-	"plugin"
 
 	"github.com/Jeffail/gabs"
 	"github.com/LogArk/logark/internal/outputs/stdout"
 	"github.com/LogArk/logark/internal/pipeline"
 	"github.com/LogArk/logark/internal/queue"
-	plg "github.com/LogArk/logark/pkg/plugin"
 )
 
-type FilterAction struct {
-	Name      string
-	Plugin    plg.FilterPlugin
-	OnSuccess *FilterPipeline
-	OnFailure *FilterPipeline
-}
-
-type FilterPipeline struct {
-	Filters []FilterAction
-}
-
-func buildPipeline(f []pipeline.Filter) *FilterPipeline {
-	var err error
-	var rootPipeline FilterPipeline
-	var plugins map[string]*plugin.Plugin = make(map[string]*plugin.Plugin)
-
-	/* Get binary directory */
-	dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-
-	for _, v := range f {
-		var fa FilterAction
-		fa.Name = v.GetName()
-
-		// Check if plugin is already loaded. If not, load it
-		plug := plugins[fa.Name]
-		if plug == nil {
-			plug, err = plugin.Open(dir + "/plugins/" + fa.Name + ".so")
-			if err != nil {
-				fmt.Println(err)
-				os.Exit(1)
-			}
-			plugins[fa.Name] = plug
-		}
-
-		newPlugin, err := plug.Lookup("New")
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
-		fa.Plugin = newPlugin.(func() plg.FilterPlugin)()
-		fa.Plugin.Init(v.GetParams())
-		fa.OnSuccess = buildPipeline(v.GetOnSuccess())
-		fa.OnFailure = buildPipeline(v.GetOnFailure())
-
-		rootPipeline.Filters = append(rootPipeline.Filters, fa)
-	}
-	return &rootPipeline
-}
-
-func execPipeline(log *gabs.Container, p *FilterPipeline) {
-	var executionStack []FilterAction
+func execPipeline(log *gabs.Container, p *pipeline.FilterPipeline) {
+	var executionStack []pipeline.FilterAction
 
 	// Initialize filter stack
 	for i := len(p.Filters) - 1; i >= 0; i-- {
@@ -99,8 +43,8 @@ func execPipeline(log *gabs.Container, p *FilterPipeline) {
 	}
 }
 
-func execOutput(log []byte, p pipeline.Pipeline) {
-	for _, o := range p.Outputs {
+func execOutput(log []byte, o []pipeline.Output) {
+	for _, o := range o {
 		switch o.GetName() {
 		case "stdout":
 			stdout.Send(log)
@@ -109,10 +53,9 @@ func execOutput(log []byte, p pipeline.Pipeline) {
 	}
 }
 
-func filterWorker(qm *queue.QueueManager, p *FilterPipeline, workerId uint) {
+func filterWorker(qm *queue.QueueManager, p *pipeline.FilterPipeline, workerId uint) {
 	for {
 		job, _ := qm.GetFilterJob()
-		//fmt.Println(workerId, " : got filter job:  ", job.JobId)
 		jsonParsed, err := gabs.ParseJSON(job.Log)
 		if err != nil {
 			fmt.Println("====================", string(job.Log))
@@ -126,40 +69,28 @@ func filterWorker(qm *queue.QueueManager, p *FilterPipeline, workerId uint) {
 	}
 }
 
-func outputWorker(qm *queue.QueueManager, p pipeline.Pipeline, workerId uint) {
+func outputWorker(qm *queue.QueueManager, o []pipeline.Output, workerId uint) {
 	for {
 		job, _ := qm.GetOutputJob()
-		//fmt.Println(workerId, " : got output job:  ", job.JobId)
-		execOutput(job.Log, p)
+		execOutput(job.Log, o)
 		qm.CompleteOutputJob(job)
 	}
 }
 
 func main() {
 
-	//fmt.Println("Loading pipeline...")
 	p, _ := pipeline.Load("./config/pipeline.yaml")
 
-	rp := buildPipeline(p.Process)
-
-	fmt.Println(rp)
-
-	//fmt.Println("Creating queue manager")
 	qm := queue.NewQueueManager()
 
-	go outputWorker(qm, p, 0)
-
+	go outputWorker(qm, p.Outputs, 0)
 	for i := uint(0); i < p.Settings.Workers; i++ {
-		//fmt.Println("Starting worker: ", i)
-		go filterWorker(qm, rp, i)
+		go filterWorker(qm, p.FilterPipeline, i)
 	}
-
-	//fmt.Println("Starting Output dispatch")
 	go qm.OutputDispatch()
-
-	//fmt.Println("Starting Filter dispatch")
 	go qm.FilterDispatch()
 
+	/* Fake stdin input */
 	scanner := bufio.NewScanner(os.Stdin)
 	for {
 		for scanner.Scan() {
